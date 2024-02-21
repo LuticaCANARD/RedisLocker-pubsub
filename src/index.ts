@@ -4,7 +4,7 @@ import type { RedisLockerSetting } from './settings/lockersetting.js';
 
 export class RedisLocker {
 
-    private redisClient : RedisClientType;
+    private redisClient : RedisClientType<any, any, any>;
     private setting : RedisLockerSetting;
     private targetName :string;
     private targetChannel : string;
@@ -16,7 +16,7 @@ export class RedisLocker {
     private callback : () => void;
 
     constructor(
-        origin : RedisClientType,
+        origin : RedisClientType<any, any, any>,
         targetName : string,
         setting?:RedisLockerSetting
     )
