@@ -4,36 +4,36 @@ import type { RedisLockerSetting } from './settings/lockersetting.js';
 
 export class RedisLocker {
 
-    private redisClients:RedisClientType;
+    private redisClient : RedisClientType;
     private setting : RedisLockerSetting;
-    private callback : ()=>void;
     private targetName :string;
     private targetChannel : string;
+    private getLock = false;
+    private targetSemaphoreName : string;
+    private mySemaphoreKey:string;
+    private isSubscribing = false;
+    private needLock = false;
+    private callback : () => void;
+
     constructor(
         origin : RedisClientType,
-        channel : string,
-        callback : ()=>void ,
+        targetName : string,
         setting?:RedisLockerSetting
     )
     {
         // Just doing setting...
-        this.redisClients = origin;
+        this.redisClient = origin;
         this.setting = setting;
-        this.targetName = channel;
+        this.targetName = targetName;
+        this.targetChannel = `${targetName}_locking_publish`;
+        this.targetSemaphoreName = `${targetName}_locker`;
+        this.mySemaphoreKey = String(Date.now());
     }
-    getClient = () => this.redisClients; // DO NOT ACCESS REDIS CLIENT DIRECTLY!
-    /**
-     * 
-     * @author : Lutica_CANARD
-     */
-    changeCallback = (newCallback:()=>void)=>{
-        this.callback = newCallback; 
-        this.redisClients.connect();
-        this.redisClients.unsubscribe(this.targetChannel);
-        this.redisClients.subscribe(this.targetChannel,(msg:string)=>{
-            this.callback();
-        });
+    getClient = () => this.redisClient; // DO NOT ACCESS REDIS CLIENT DIRECTLY!
 
+    #settingRedisConnection = async()=>{
+        if(!this.redisClient.isReady)
+            await this.redisClient.connect();
     };
 
     /**
@@ -41,25 +41,107 @@ export class RedisLocker {
      * @author : Lutica_CANARD
      * @returns if fail to get semaphore, return false. else, return true
      */
-    locking = ()=>{
+    locking = async ()=>{
+        // Prepare Redis connection.
+        await this.#settingRedisConnection();
         // Try get locking semaphore
-
-        // If there is no occupation about lock,
-        // make queue, and 
-
-        // If there is queue about waiting lock, 
-        // Do append to queue
-
-    }
+        // how can I get `semaphore`?
+        // DEFINE : `semaphore` -> get by `SET NX target_name ... `
+        try{
+            await this.redisClient.watch(this.targetSemaphoreName);
+            const getResult = await this.redisClient.setNX(this.targetSemaphoreName,this.mySemaphoreKey);
+            if(getResult === true)
+            {
+                // IF OK ... > got Locked...
+                // If there is no occupation about lock, get semaphore
+                if(this.callback != undefined){
+                    this.callback();
+                }
+                this.getLock = true;
+                return true;
+            }
+            else
+            {
+                // IF NIL ... > occupied...
+                // Do subscribe target channel.
+                this.redisClient.subscribe(this.targetChannel,this.#tryGetSemaphoreMessage);
+    
+                this.getLock = false;
+                this.needLock = true;
+                this.isSubscribing = true;
+                return false;
+            }
+        }
+        catch(e)
+        {
+            console.error(e);
+            return false;
+        }
+    };
     /**
      * Release Lock.
      * @author : Lutica_CANARD
      */
-    release = ()=>{
+    release = async ()=>{
+        await this.#settingRedisConnection();
+        this.needLock = false;
         // if I have lock, send signal that I'm releasing lock...
+        if(this.getLock && await this.redisClient.get(this.targetSemaphoreName) === this.mySemaphoreKey)
+        {
+            try{
+                // release my lock...
+                await this.redisClient.del(this.targetSemaphoreName);
 
-        // and then, delete from queue.
-    }
+                // and then, publish my unlocking event. 
+                await this.redisClient.publish(this.targetChannel,'unlock');
 
+                // finally, unlock my instance.
+                this.getLock = false;
+                this.isSubscribing = false;
+
+                return true;
+            }
+            catch(e){
+                return false;
+            }
+        }
+        return false;
+
+    };
+
+    /**
+     * try and repeating get lock until this object get lock. 
+     * @returns 
+     */
+    awaitGetLock = async ( maxTimeTry?:number )=>{
+        const maxMs = maxTimeTry === -1 ? Infinity : maxTimeTry ?? this.setting.maxTime;  
+        let tryCount = 0;
+        this.needLock = true;
+        if(this.isSubscribing === false)
+        {
+            await this.locking();
+        }
+        while(this.isSubscribing === true && this.getLock !== true)
+        {
+            // working by locking...
+            if(tryCount > maxMs)break;
+            tryCount++;
+        }
+
+        return this.getLock;
+    };
+    asyncGetLock = ( callback:()=>void ) =>{
+        if( this.getLock===true ){
+            callback();
+            return;
+        }
+        this.callback = callback;
+    };
+
+
+
+    #tryGetSemaphoreMessage = async (msg:string)=>{
+        if( this.needLock === true && msg === 'unlock') await this.locking();
+    };
 
 }
