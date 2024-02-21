@@ -1,10 +1,13 @@
-import type { RedisClientType } from 'redis';
+import type { RedisClientOptions,RedisClientType } from 'redis';
 import defaultSetting from './settings/lockersetting.js';
+import redis from 'redis';
 import type { RedisLockerSetting } from './settings/lockersetting.js';
 
 export class RedisLocker {
 
     private redisClient : RedisClientType<any, any, any>;
+    private redisClientForPub : RedisClientType<any, any, any>;
+
     private setting : RedisLockerSetting;
     private targetName :string;
     private targetChannel : string;
@@ -16,14 +19,15 @@ export class RedisLocker {
     private callback : () => void;
 
     constructor(
-        origin : RedisClientType<any, any, any>,
+        originSetting : RedisClientOptions,
         targetName : string,
         setting?:RedisLockerSetting
     )
     {
         // Just doing setting...
-        this.redisClient = origin;
-        this.setting = setting;
+        this.redisClient = redis.createClient(originSetting);
+        this.redisClientForPub = redis.createClient(originSetting);
+        this.setting = setting ?? defaultSetting;
         this.targetName = targetName;
         this.targetChannel = `${targetName}_locking_publish`;
         this.targetSemaphoreName = `${targetName}_locker`;
@@ -34,6 +38,8 @@ export class RedisLocker {
     #settingRedisConnection = async()=>{
         if(!this.redisClient.isReady)
             await this.redisClient.connect();
+        if(!this.redisClientForPub.isReady)
+            await this.redisClientForPub.connect();
     };
 
     /**
@@ -48,23 +54,26 @@ export class RedisLocker {
         // how can I get `semaphore`?
         // DEFINE : `semaphore` -> get by `SET NX target_name ... `
         try{
-            await this.redisClient.watch(this.targetSemaphoreName);
-            const getResult = await this.redisClient.setNX(this.targetSemaphoreName,this.mySemaphoreKey);
+            //await this.redisClient.watch(this.targetSemaphoreName);
+            const getResult = await this.redisClientForPub.setNX(this.targetSemaphoreName,this.mySemaphoreKey);
             if(getResult === true)
             {
                 // IF OK ... > got Locked...
                 // If there is no occupation about lock, get semaphore
+
+                await this.redisClientForPub.expire(this.targetSemaphoreName,this.setting.expireTime);
+                this.getLock = true;
                 if(this.callback != undefined){
                     this.callback();
                 }
-                this.getLock = true;
                 return true;
             }
             else
             {
                 // IF NIL ... > occupied...
                 // Do subscribe target channel.
-                this.redisClient.subscribe(this.targetChannel,this.#tryGetSemaphoreMessage);
+                console.log('inserted')
+                await this.redisClient.subscribe(this.targetChannel,this.#tryGetSemaphoreMessage);
     
                 this.getLock = false;
                 this.needLock = true;
@@ -92,8 +101,9 @@ export class RedisLocker {
                 // release my lock...
                 await this.redisClient.del(this.targetSemaphoreName);
 
+                console.log('release...',this.targetChannel);
                 // and then, publish my unlocking event. 
-                await this.redisClient.publish(this.targetChannel,'unlock');
+                await this.redisClientForPub.publish(this.targetChannel,'unlock');
 
                 // finally, unlock my instance.
                 this.getLock = false;
@@ -124,7 +134,7 @@ export class RedisLocker {
         while(this.isSubscribing === true && this.getLock !== true)
         {
             // working by locking...
-            if(tryCount > maxMs)break;
+            if(tryCount > maxMs) break;
             tryCount++;
         }
 
@@ -136,12 +146,22 @@ export class RedisLocker {
             return;
         }
         this.callback = callback;
+        this.needLock = true;
+        if(this.isSubscribing === false)
+        {
+            this.locking().then();
+        }
     };
 
 
 
     #tryGetSemaphoreMessage = async (msg:string)=>{
+        console.log('unlock!');
         if( this.needLock === true && msg === 'unlock') await this.locking();
     };
+    get nowLocking()
+    { 
+        return this.getLock;
+    }
 
 }
