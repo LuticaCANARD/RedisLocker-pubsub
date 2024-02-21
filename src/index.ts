@@ -133,7 +133,7 @@ export class RedisLocker {
         }
         while(this.isSubscribing === true && this.getLock !== true)
         {
-            // working by locking...
+            // working by locking()...
             if(tryCount > maxMs) break;
             tryCount++;
         }
