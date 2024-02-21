@@ -24,6 +24,11 @@ test('Locking Test',async ()=>{
     tester[1].asyncGetLock(()=>{
         console.log(tester[1].nowLocking , '>>>><<<<');
         console.log('GET!');
+        tester[1].release().then();
+    });
+    tester[2].asyncGetLock(()=>{
+        console.log(tester[2].nowLocking , '>>>><<<<');
+        console.log('GET!2');
         //tester[1].release().then();
     });
     await sleep(1000);
