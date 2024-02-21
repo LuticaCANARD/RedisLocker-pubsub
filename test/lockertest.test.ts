@@ -1,5 +1,4 @@
 import { RedisLocker } from '../src/index.js';
-import redis from 'redis';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -46,5 +45,5 @@ test('Locking Test',async ()=>{
 const sleep = (ms) => {
     return new Promise(resolve=>{
         setTimeout(resolve,ms);
-    })
-}
+    });
+};

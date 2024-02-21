@@ -72,7 +72,7 @@ export class RedisLocker {
             {
                 // IF NIL ... > occupied...
                 // Do subscribe target channel.
-                console.log('inserted')
+                console.log('inserted');
                 await this.redisClient.subscribe(this.targetChannel,this.#tryGetSemaphoreMessage);
     
                 this.getLock = false;
