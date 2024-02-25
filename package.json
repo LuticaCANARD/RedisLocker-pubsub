@@ -18,6 +18,15 @@
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.1"
   },
+  "keywords": [
+    "nodejs",
+    "redis",
+    "lock",
+    "pub-sub"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "name": "redislocker-pubsub",
   "version": "1.0.0",
   "description": "Distributed Lock library based on pub-sub pattern for Redis and Node.js",
