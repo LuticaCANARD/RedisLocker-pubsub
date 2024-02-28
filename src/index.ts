@@ -201,7 +201,7 @@ export class RedisClusterLock {
     // N/2 + 1의 다수합의 알고리즘임에 유의.
     //  ❗잠금을 획득하는데 소요된 총 시간이 잠금 유효 시간보다 작을 경우 잠금을 획득한 것으로 간주됩니다.
     //
-    setLock : (lockName?:string)=>boolean =  async(lockName?:string)=>{
+    setLock : (lockName?:string)=>Promise<boolean> =  async(lockName?:string)=>{
         const nowMillisecond = Date.now();
         const atLeast = Math.floor(this.#redisLockers.length/2); // 최소 합의 수
         const limitSecond = this.#clusterSetting.redisConnectionSetting.expireTime < this.#clusterSetting.maxExpireTime ? this.#clusterSetting.redisConnectionSetting.expireTime : this.#clusterSetting.maxExpireTime;
@@ -218,7 +218,7 @@ export class RedisClusterLock {
                                     failedConnection.push(x);
                                 res(r);
                             });
-                        }catch(e){
+                        } catch(e) {
                             rej(e);
                         }
                     }
@@ -226,25 +226,25 @@ export class RedisClusterLock {
             });
             const result = await Promise.all(actions);
             acceptedClient = result.reduce((acc,curr)=>curr === true ? acc++ : acc,0);
-            
         }
         else
         {
             for(const nowRedisConnection of this.#redisLockers)
             {
-                // O(N)?
-    
                 if(await nowRedisConnection.locking() === true)
                 {
-                    
+                    acceptedClient++;
+                } 
+                else
+                {
+                    failedConnection.push(nowRedisConnection);
                 }
             }
         }
-        if(acceptedClient > atLeast)
-        {
-            // 
-        } else {
+        if(acceptedClient > atLeast) {
             
+        } else {
+            //
         }
 
         return false;
