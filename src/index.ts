@@ -68,17 +68,19 @@ export class RedisClusterLock {
             for(const nowRedisConnection of this.#redisLockers)
             {
                 // O(N)?
-    
                 if(await nowRedisConnection.locking() === true)
                 {
                     
                 }
             }
         }
-        if(acceptedClient > atLeast)
+        if(acceptedClient > atLeast) 
         {
-            // 
-        } else {
+            // ACCEPTED !
+        } 
+        else 
+        {
+            // FAILED...
             
         }
 
