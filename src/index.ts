@@ -36,7 +36,10 @@ export class RedisClusterLock {
     // 클러스터링 Lock에 성공시 true, 실패시 false.
     // N/2 + 1의 다수합의 알고리즘임에 유의.
     //  ❗잠금을 획득하는데 소요된 총 시간이 잠금 유효 시간보다 작을 경우 잠금을 획득한 것으로 간주됩니다.
-    //
+    //https://kkambi.tistory.com/196 참조하여 사용자 경험 증강
+
+    // 1. lock이름은 불러올 때 한다.
+    // 2. timeout 을 넣는다.
     setLock : ()=>Promise<boolean> = async()=>{
         const nowMillisecond = Date.now();
         const atLeast = Math.floor(this.#redisLockers.length/2); // 최소 합의 수
