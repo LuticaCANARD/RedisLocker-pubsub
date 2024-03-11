@@ -20,6 +20,7 @@ import { RedisLocker } from './singleLock.js';
 
 
 export class RedisClusterLock {
+    // 다중 Lock 관리시에는 lockResourceName에 따른 락을 관리해야 한다.
     #redisLockers:RedisLocker[] = null;
     #clusterSetting :RedisClusterLockerSetting = null;
     constructor( 
@@ -36,7 +37,7 @@ export class RedisClusterLock {
     // N/2 + 1의 다수합의 알고리즘임에 유의.
     //  ❗잠금을 획득하는데 소요된 총 시간이 잠금 유효 시간보다 작을 경우 잠금을 획득한 것으로 간주됩니다.
     //
-    setLock : (lockName?:string)=>Promise<boolean> =  async(lockName?:string)=>{
+    setLock : ()=>Promise<boolean> = async()=>{
         const nowMillisecond = Date.now();
         const atLeast = Math.floor(this.#redisLockers.length/2); // 최소 합의 수
         const limitSecond = this.#clusterSetting.redisConnectionSetting.expireTime < this.#clusterSetting.maxExpireTime ? this.#clusterSetting.redisConnectionSetting.expireTime : this.#clusterSetting.maxExpireTime;
@@ -70,21 +71,53 @@ export class RedisClusterLock {
                 // O(N)?
                 if(await nowRedisConnection.locking() === true)
                 {
-                    
+                    acceptedClient ++;
+                }
+                else 
+                {
+                    failedConnection.push(nowRedisConnection);
                 }
             }
         }
         if(acceptedClient > atLeast) 
         {
             // ACCEPTED !
+            
+            // 실패한 연결에 대한 처리 -> redission 따라가기.
+            Promise.all(
+                failedConnection.map(x=>new Promise((res,rej) => {
+                    try{
+                        x.locking().then((r)=>{
+                            res(r);
+                        });
+                    }catch(e){
+                        rej(e);
+                    }
+                }))
+            );
+            return true;
         } 
         else 
         {
             // FAILED...
-            
+            if(this.#clusterSetting.experimentParallelQuery === true)
+            {
+                const revertActions = this.#redisLockers.map(x=> new Promise(
+                    (res,rej)=>{
+                        x.release();
+                    }
+                ));
+                Promise.all(revertActions);
+            }
+            else
+            {
+                for(const nowRedisConnection of this.#redisLockers)
+                {
+                    await nowRedisConnection.release();
+                }
+            }
+            throw new Error('set Multiple locks fail.');
         }
-
-        return false;
     };
 }
 

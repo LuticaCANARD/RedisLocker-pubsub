@@ -96,8 +96,6 @@ export class RedisLocker {
             try{
                 // release my lock...
                 await this.redisClient.del(this.targetSemaphoreName);
-
-                console.log('release...',this.targetChannel);
                 // and then, publish my unlocking event. 
                 await this.redisClientForPub.publish(this.targetChannel,'unlock');
 
