@@ -145,3 +145,5 @@ dist
 
 redis/*
 redis.conf/*
+
+*.code-workspace
