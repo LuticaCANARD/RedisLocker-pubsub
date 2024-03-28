@@ -129,11 +129,17 @@ export class RedisLocker {
         {
             // working by locking()...
             if(tryCount > maxMs) break;
-            tryCount++;
+            // Base on Event-queue.
+            // Use timeout.
+            await Promise.all([this.#awaitingLock]);
+            tryCount ++;
         }
-
         return this.getLock;
     };
+    #awaitingLock = async() => new Promise((res,rej)=>{
+        res(this.getLock);
+    });
+
     asyncGetLock = ( callback:()=>void ) =>{
         if( this.getLock===true ){
             callback();
