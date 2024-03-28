@@ -133,7 +133,7 @@ export class RedisLocker {
         return new Promise<void>((res)=>{
             setTimeout(() => {
                 this.#awaitingLock().then(()=>{res();});
-            }, 1);
+            }, 0);
         });
     };
 
